@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: responses
+    // Document ID: auto-generated
+    // Fields:
+    //   - specialty: string (required)
+    //   - pain: string (required)
+    //   - timing: string (required)
+    //   - demoChoice: string (required)
+    //   - contactInfo: string (required, max 100 chars)
+    //   - submittedAt: timestamp (required)
+    //   - language: string (required, 'en' or 'ar')
+    //
+    // Collection: sessions
+    // Document ID: sessionId
+    // Fields:
+    //   - sessionId: string (required)
+    //   - events: list (required)
+    //   - lastUpdate: timestamp (required)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isValidResponse(data) {
+      return data.keys().hasAll(['specialty', 'pain', 'timing', 'demoChoice', 'contactInfo', 'submittedAt', 'language']) &&
+             data.specialty is string &&
+             data.pain is string &&
+             data.timing is string &&
+             data.demoChoice is string &&
+             data.contactInfo is string &&
+             data.submittedAt is timestamp &&
+             data.language in ['en', 'ar'];
+    }
+
+    function isValidSession(data) {
+      return data.keys().hasAll(['sessionId', 'events', 'lastUpdate']) &&
+             data.sessionId is string &&
+             data.events is list &&
+             data.lastUpdate is timestamp &&
+             (!('contactInfo' in data) || data.contactInfo is string);
+    }
+
+    match /responses/{responseId} {
+      allow create: if isValidResponse(request.resource.data);
+      allow read, update, delete: if false;
+    }
+
+    match /sessions/{sessionId} {
+      // Allow creating or updating a session document
+      allow create, update: if isValidSession(request.resource.data);
+      allow read, delete: if false;
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Response": {
+      "title": "Form Response",
+      "description": "A response from a doctor interested in Anzarseha AI services.",
+      "type": "object",
+      "properties": {
+        "specialty": {
+          "type": "string",
+          "description": "The doctor's medical specialty."
+        },
+        "pain": {
+          "type": "string",
+          "description": "The primary administrative pain point identified."
+        },
+        "timing": {
+          "type": "string",
+          "description": "The urgency/timing for integration."
+        },
+        "demoChoice": {
+          "type": "string",
+          "description": "The specific AI use case chosen for the demo."
+        },
+        "contactInfo": {
+          "type": "string",
+          "description": "The doctor's contact information (WhatsApp or Email)."
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the response was submitted."
+        },
+        "language": {
+          "type": "string",
+          "enum": ["en", "ar"],
+          "description": "The language used during submission."
+        }
+      },
+      "required": ["specialty", "pain", "timing", "demoChoice", "contactInfo", "submittedAt", "language"]
+    },
+    "Session": {
+      "title": "User Session",
+      "description": "A record of a user's journey through the form, grouping all clicks.",
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "description": "Unique ID for the user session."
+        },
+        "events": {
+          "type": "array",
+          "description": "List of click events in this session."
+        },
+        "lastUpdate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the last interaction happened."
+        },
+        "contactInfo": {
+          "type": "string",
+          "description": "The final contact info submitted by the user."
+        }
+      },
+      "required": ["sessionId", "events", "lastUpdate"]
+    }
+  },
+  "firestore": {
+    "/responses/{responseId}": {
+      "schema": "Response",
+      "description": "Collection of all form responses."
+    },
+    "/sessions/{sessionId}": {
+      "schema": "Session",
+      "description": "Collection of user sessions with grouped clicks."
+    }
+  }
+}

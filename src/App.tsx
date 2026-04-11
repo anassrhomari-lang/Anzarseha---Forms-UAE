@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Step, UserData } from './types';
-import { ChevronRight, CheckCircle2, ArrowLeft, ShieldCheck, Clock, ArrowRight, Languages } from 'lucide-react';
+import { ChevronRight, CheckCircle2, ArrowLeft, ShieldCheck, Clock, ArrowRight, Languages, Loader2 } from 'lucide-react';
 import { Language, translations } from './translations';
+import { db } from './firebase';
+import { collection, addDoc, serverTimestamp, setDoc, doc, arrayUnion } from 'firebase/firestore';
 
 const LOGO_URL = "https://framerusercontent.com/images/YPAzIjoMNrFadoMFFkX13J0nXrs.png?scale-down-to=512&width=3432&height=3432";
 
@@ -11,6 +13,9 @@ export default function App() {
   const [userData, setUserData] = useState<UserData>({});
   const [direction, setDirection] = useState(1);
   const [lang, setLang] = useState<Language>('en');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const sessionId = useMemo(() => Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15), []);
 
   const t = useMemo(() => translations[lang], [lang]);
 
@@ -19,7 +24,7 @@ export default function App() {
     document.documentElement.lang = lang;
   }, [lang, t.dir]);
 
-  const handleChoice = useCallback((choice: string) => {
+  const handleChoice = useCallback(async (choice: string) => {
     setDirection(1);
     const nextStepMap: Record<Step, Step> = {
       'WELCOME': 'START',
@@ -33,6 +38,62 @@ export default function App() {
 
     const nextStep: Step = nextStepMap[currentStep];
     
+    // Record the click in Firestore (grouped by session ID)
+    try {
+      const sessionRef = doc(db, 'sessions', sessionId);
+      await setDoc(sessionRef, {
+        sessionId: sessionId,
+        lastUpdate: serverTimestamp(),
+        events: arrayUnion({
+          step: currentStep,
+          choice: choice,
+          timestamp: new Date().toISOString()
+        })
+      }, { merge: true });
+    } catch (error) {
+      const errInfo = {
+        error: error instanceof Error ? error.message : String(error),
+        operationType: 'set',
+        path: `sessions/${sessionId}`,
+        data: { step: currentStep, choice }
+      };
+      console.error('Firestore Session Error:', JSON.stringify(errInfo));
+    }
+
+    if (currentStep === 'CONTACT_FORM') {
+      setIsSubmitting(true);
+      try {
+        // Update session with contact info
+        const sessionRef = doc(db, 'sessions', sessionId);
+        await setDoc(sessionRef, {
+          contactInfo: userData.contactInfo || 'N/A',
+          lastUpdate: serverTimestamp()
+        }, { merge: true });
+
+        await addDoc(collection(db, 'responses'), {
+          specialty: userData.specialty || 'N/A',
+          pain: userData.pain || 'N/A',
+          timing: userData.timing || 'N/A',
+          demoChoice: userData.demoChoice || 'N/A',
+          contactInfo: userData.contactInfo || 'N/A',
+          language: lang,
+          submittedAt: serverTimestamp()
+        });
+      } catch (error) {
+        const errInfo = {
+          error: error instanceof Error ? error.message : String(error),
+          operationType: 'create',
+          path: 'responses',
+          data: { ...userData, lang }
+        };
+        console.error('Firestore Response Error:', JSON.stringify(errInfo));
+        // We still proceed to the final step to not block the user, 
+        // but the error is logged for diagnosis.
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+
     setUserData(prev => {
       const newData = { ...prev };
       if (currentStep === 'START') newData.specialty = choice;
@@ -43,7 +104,7 @@ export default function App() {
     });
 
     setCurrentStep(nextStep);
-  }, [currentStep]);
+  }, [currentStep, userData, lang]);
 
   const goBack = useCallback(() => {
     setDirection(-1);
@@ -221,13 +282,19 @@ export default function App() {
               </div>
 
               <button 
-                disabled={!userData.contactInfo}
+                disabled={!userData.contactInfo || isSubmitting}
                 onClick={() => handleChoice('FINAL')}
                 className="w-full group relative flex items-center justify-center gap-3 px-8 py-4 bg-brand text-white rounded-xl md:rounded-2xl font-bold hover:bg-brand-dark transition-all shadow-xl shadow-brand/20 active:scale-95 text-sm md:text-base disabled:opacity-50 disabled:pointer-events-none overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                <span className="relative z-10">{t.steps.contact.submit}</span>
-                <ArrowRight className={`w-4 h-4 md:w-5 md:h-5 group-hover:translate-x-1 transition-transform relative z-10 ${lang === 'ar' ? 'rotate-180' : ''}`} />
+                {isSubmitting ? (
+                  <Loader2 className="w-5 h-5 animate-spin relative z-10" />
+                ) : (
+                  <>
+                    <span className="relative z-10">{t.steps.contact.submit}</span>
+                    <ArrowRight className={`w-4 h-4 md:w-5 md:h-5 group-hover:translate-x-1 transition-transform relative z-10 ${lang === 'ar' ? 'rotate-180' : ''}`} />
+                  </>
+                )}
               </button>
             </div>
 
